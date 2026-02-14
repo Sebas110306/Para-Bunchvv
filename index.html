@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nuestra Galaxia Eterna</title>
+    <style>
+        body, html { margin: 0; height: 100%; background: #000; overflow: hidden; }
+        canvas { display: block; }
+
+        .player {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            width: 90%; max-width: 600px; display: flex; align-items: center; gap: 10px;
+            padding: 10px; border: 2px solid #8a2be2; border-radius: 999px;
+            background: rgba(20, 0, 40, 0.4); backdrop-filter: blur(10px);
+            box-shadow: 0 0 20px #8a2be2; z-index: 1000;
+            font-family: Arial, sans-serif; color: #fff;
+        }
+
+        .player button { background: none; border: none; color: #fff; font-size: 22px; cursor: pointer; }
+        .progress { flex-grow: 1; height: 12px; background: rgba(255,255,255,0.1); border-radius: 999px; overflow: hidden; }
+        .progress-bar { height: 100%; width: 0%; background: #8a2be2; box-shadow: 0 0 10px #ff00ff; }
+        .time { min-width: 80px; text-align: right; font-size: 12px; }
+
+        .upload-container { position: fixed; top: 20px; right: 20px; z-index: 1001; }
+        .upload-label {
+            background: rgba(138, 43, 226, 0.3); border: 2px solid #8a2be2; color: white; 
+            padding: 10px 20px; border-radius: 20px; cursor: pointer; 
+            font-family: Arial; font-weight: bold; box-shadow: 0 0 15px #8a2be2; backdrop-filter: blur(5px);
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+
+<div class="upload-container">
+    <label class="upload-label" for="file-upload">Subir tu música 🎵</label>
+    <input id="file-upload" type="file" accept="audio/*" style="display: none;" />
+</div>
+
+<div class="player">
+    <button id="play">▶️</button>
+    <div class="progress" id="progress"><div class="progress-bar" id="progress-bar"></div></div>
+    <div class="time" id="time">0:00 / 0:00</div>
+</div>
+
+<audio id="audio" loop>
+    <source src="https://www.dropbox.com/scl/fi/qfv28rqu6b36jwusao4x4/Love.MP3?rlkey=ptjd053374f028aa4jfcfrfxn&st=1j0j51eo&raw=1" type="audio/mpeg">
+</audio>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.148.0/build/three.min.js"></script>
+
+<script>
+    const audio = document.getElementById("audio"),
+          playBtn = document.getElementById("play"),
+          progressBar = document.getElementById("progress-bar"),
+          timeDisplay = document.getElementById("time");
+
+    // 1. REPRODUCTOR
+    playBtn.addEventListener("click", () => {
+        if (audio.paused) { audio.play(); playBtn.textContent = "⏸️"; }
+        else { audio.pause(); playBtn.textContent = "▶️"; }
+    });
+
+    audio.addEventListener("timeupdate", () => {
+        const p = (audio.currentTime / audio.duration) * 100;
+        progressBar.style.width = (isFinite(p) ? p : 0) + "%";
+        const cur = Math.floor(audio.currentTime);
+        const dur = Math.floor(audio.duration || 0);
+        timeDisplay.textContent = `${Math.floor(cur/60)}:${(cur%60).toString().padStart(2,'0')} / ${Math.floor(dur/60)}:${(dur%60).toString().padStart(2,'0')}`;
+    });
+
+    // 2. ESCENA 3D
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 5000);
+    const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("c"), antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+
+    // 3. ESTRELLAS DE FONDO
+    const starGeo = new THREE.BufferGeometry();
+    const starPos = new Float32Array(90000);
+    for (let i = 0; i < 90000; i++) starPos[i] = (Math.random() - 0.5) * 4000;
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+    const starPoints = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.8 }));
+    scene.add(starPoints);
+
+    // 4. NÚCLEO Y ANILLO
+    const coreGroup = new THREE.Group();
+    scene.add(coreGroup);
+
+    // Esfera Negra
+    const coreMesh = new THREE.Mesh(new THREE.SphereGeometry(30, 32, 32), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+    coreGroup.add(coreMesh);
+
+    // --- PUNTOS BLANCOS SOBRE EL NÚCLEO ---
+    const dotsCount = 1500;
+    const dotsPos = new Float32Array(dotsCount * 3);
+    for (let i = 0; i < dotsCount; i++) {
+        const phi = Math.acos(-1 + (2 * i) / dotsCount);
+        const theta = Math.sqrt(dotsCount * Math.PI) * phi;
+        const r = 30.5;
+        dotsPos[i * 3] = r * Math.cos(theta) * Math.sin(phi);
+        dotsPos[i * 3 + 1] = r * Math.sin(theta) * Math.sin(phi);
+        dotsPos[i * 3 + 2] = r * Math.cos(phi);
+    }
+    const dotsGeo = new THREE.BufferGeometry();
+    dotsGeo.setAttribute('position', new THREE.BufferAttribute(dotsPos, 3));
+    const dotsMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.7, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending });
+    const coreDots = new THREE.Points(dotsGeo, dotsMat);
+    coreGroup.add(coreDots);
+
+    // Brillo Morado
+    const canvasGlow = document.createElement("canvas");
+    canvasGlow.width = 256; canvasGlow.height = 256;
+    const ctxG = canvasGlow.getContext("2d");
+    const grad = ctxG.createRadialGradient(128,128,0,128,128,128);
+    grad.addColorStop(0, "rgba(138,43,226,0.9)");
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    ctxG.fillStyle = grad; ctxG.fillRect(0,0,256,256);
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvasGlow), transparent: true }));
+    glow.scale.set(350, 350, 1);
+    coreGroup.add(glow);
+
+    // --- ANILLO BLANCO BRILLANTE ---
+    const ringGeo = new THREE.TorusGeometry(85, 1.5, 16, 100); 
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthTest: false });
+    const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+    ringMesh.renderOrder = 10;
+    ringMesh.rotation.x = 1.4; 
+    ringMesh.rotation.y = 0.3;
+    coreGroup.add(ringMesh);
+
+    // 5. PALABRAS
+    const palabras = ["TE AMO ❤️", "MI TODO 🌎", "OJITOS BRILLANTES ✨", "PRINCESA 👑", "ERES MAGIA 🦋", "MI CIELO 🌌", "SIEMPRE JUNTOS ♾️", "HERMOSA 😍", "MI VIDA", "TE ADORO", "MI REINA", "TE EXTRAÑO", "MI LUZ", "ETERNIDAD"];
+    const textGroup = new THREE.Group();
+    scene.add(textGroup);
+
+    for (let i = 0; i < 200; i++) {
+        const p = palabras[i % palabras.length];
+        const txtCanvas = document.createElement("canvas");
+        txtCanvas.width = 300; txtCanvas.height = 100;
+        const tCtx = txtCanvas.getContext("2d");
+        tCtx.font = "bold 35px Arial"; tCtx.fillStyle = "#ffffff"; tCtx.textAlign = "center";
+        tCtx.shadowColor = "#8a2be2"; tCtx.shadowBlur = 15;
+        tCtx.fillText(p, 150, 50);
+
+        const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(txtCanvas), transparent: true }));
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 150 + Math.random() * 500;
+        sprite.position.set(Math.cos(angle) * radius, (Math.random() - 0.5) * 80, Math.sin(angle) * radius);
+        sprite.scale.set(80, 25, 1);
+        sprite.userData = { angle, radius, speed: 0.001 + Math.random() * 0.003 };
+        textGroup.add(sprite);
+    }
+
+    camera.position.set(0, 500, 1000);
+    let targetPos = new THREE.Vector3(0, 0, 0); 
+
+    // 6. CONTROLES DE MOVIMIENTO
+    let isDragging = false, isPanning = false, prevMouse = { x: 0, y: 0 };
+    document.addEventListener('mousedown', (e) => { if (e.button === 0) isDragging = true; if (e.button === 2) isPanning = true; });
+    document.addEventListener('mouseup', () => { isDragging = false; isPanning = false; });
+    document.addEventListener('contextmenu', (e) => e.preventDefault());
+    document.addEventListener('mousemove', (e) => {
+        const delta = { x: e.clientX - prevMouse.x, y: e.clientY - prevMouse.y };
+        if (isDragging) {
+            textGroup.rotation.y += delta.x * 0.005;
+            textGroup.rotation.x += delta.y * 0.005;
+            coreGroup.rotation.y += delta.x * 0.005;
+            coreGroup.rotation.x += delta.y * 0.005;
+        } else if (isPanning) {
+            camera.position.x -= delta.x * 1;
+            camera.position.y += delta.y * 1;
+        }
+        prevMouse = { x: e.clientX, y: e.clientY };
+    });
+
+    document.addEventListener('wheel', (e) => {
+        const direction = new THREE.Vector3().subVectors(targetPos, camera.position).normalize();
+        camera.position.addScaledVector(direction, -e.deltaY * 0.5);
+    }, { passive: true });
+
+    // 7. ANIMACIÓN
+    function animate() {
+        requestAnimationFrame(animate);
+        textGroup.rotation.y += 0.001;
+        coreGroup.rotation.y += 0.001;
+        starPoints.rotation.y += 0.0001;
+
+        textGroup.children.forEach(word => {
+            word.userData.angle += word.userData.speed;
+            word.position.x = Math.cos(word.userData.angle) * word.userData.radius;
+            word.position.z = Math.sin(word.userData.angle) * word.userData.radius;
+            word.quaternion.copy(camera.quaternion);
+        });
+
+        camera.lookAt(targetPos); 
+        renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    document.getElementById('file-upload').addEventListener('change', function(e) {
+        const file = e.target.files[0]; 
+        if (file) {
+            audio.src = URL.createObjectURL(file); 
+            audio.play(); playBtn.textContent = "⏸️"; 
+        }
+    });
+</script>
+
+</body>
+</html>
