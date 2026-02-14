@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nuestra Galaxia</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/three@0.148.0/build/three.min.js"></script>
+
+    <style>
+        body, html { margin: 0; height: 100%; background: #000; overflow: hidden; }
+        canvas { display: block; }
+
+        /* Estilo del Reproductor */
+        .player {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            width: 90%; max-width: 600px; display: flex; align-items: center; gap: 10px;
+            padding: 10px; border: 2px solid #8a2be2; border-radius: 999px;
+            background: rgba(20, 0, 40, 0.4); backdrop-filter: blur(10px);
+            box-shadow: 0 0 20px #8a2be2; z-index: 1000;
+            font-family: Arial, sans-serif; color: #fff;
+        }
+
+        .player button { background: none; border: none; color: #fff; font-size: 22px; cursor: pointer; }
+        .progress { flex-grow: 1; height: 12px; background: rgba(255,255,255,0.1); border-radius: 999px; overflow: hidden; cursor: pointer; }
+        .progress-bar { height: 100%; width: 0%; background: #8a2be2; box-shadow: 0 0 10px #ff00ff; }
+        .time { min-width: 80px; text-align: right; font-size: 12px; }
+
+        /* Estilo del Botón de Subida */
+        .upload-btn {
+            position: fixed; top: 20px; right: 20px; z-index: 1001;
+            background: rgba(138, 43, 226, 0.3); border: 2px solid #8a2be2;
+            color: white; padding: 10px 20px; border-radius: 20px;
+            cursor: pointer; font-family: Arial; font-weight: bold;
+            box-shadow: 0 0 15px #8a2be2; backdrop-filter: blur(5px);
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="c"></canvas>
+
+    <label class="upload-btn" for="file-upload">Subir tu música 🎵</label>
+    <input id="file-upload" type="file" accept="audio/*" style="display: none;" />
+
+    <div class="player">
+        <button id="play">▶️</button>
+        <div class="progress" id="progress"><div class="progress-bar" id="progress-bar"></div></div>
+        <div class="time" id="time">0:00 / 0:00</div>
+    </div>
+
+    <audio id="audio" loop>
+        <source src="https://www.dropbox.com/scl/fi/qfv28rqu6b36jwusao4x4/Love.MP3?rlkey=ptjd053374f028aa4jfcfrfxn&st=1j0j51eo&raw=1" type="audio/mpeg">
+    </audio>
+
+    <script>
+        const audio = document.getElementById("audio"),
+              playBtn = document.getElementById("play"),
+              progress = document.getElementById("progress"),
+              progressBar = document.getElementById("progress-bar"),
+              timeDisplay = document.getElementById("time"),
+              fileInput = document.getElementById('file-upload');
+
+        // Lógica del Reproductor
+        playBtn.addEventListener("click", () => {
+            if (audio.paused) { audio.play(); playBtn.textContent = "⏸️"; }
+            else { audio.pause(); playBtn.textContent = "▶️"; }
+        });
+
+        audio.addEventListener("timeupdate", () => {
+            const p = (audio.currentTime / audio.duration) * 100;
+            progressBar.style.width = (isFinite(p) ? p : 0) + "%";
+            const cur = Math.floor(audio.currentTime);
+            const dur = Math.floor(audio.duration || 0);
+            timeDisplay.textContent = `${Math.floor(cur/60)}:${(cur%60).toString().padStart(2,'0')} / ${Math.floor(dur/60)}:${(dur%60).toString().padStart(2,'0')}`;
+        });
+
+        progress.addEventListener("click", (e) => {
+            const rect = progress.getBoundingClientRect();
+            const pos = (e.clientX - rect.left) / rect.width;
+            audio.currentTime = pos * audio.duration;
+        });
+
+        // Lógica para cambiar música
+        fileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0]; 
+            if (file) {
+                audio.src = URL.createObjectURL(file); 
+                audio.play(); 
+                playBtn.textContent = "⏸️"; 
+            }
+        });
+
+        // CONFIGURACIÓN 3D
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 4000);
+        const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("c"), antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        // Estrellas de fondo
+        const starGeo = new THREE.BufferGeometry();
+        const starPos = new Float32Array(60000);
+        for (let i = 0; i < 60000; i++) { starPos[i] = (Math.random() - 0.5) * 3000; }
+        starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+        const starPoints = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.8 }));
+        scene.add(starPoints);
+
+        // Núcleo
+        const core = new THREE.Mesh(new THREE.SphereGeometry(30, 32, 32), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+        scene.add(core);
+
+        const canvasGlow = document.createElement("canvas");
+        canvasGlow.width = 256; canvasGlow.height = 256;
+        const ctxG = canvasGlow.getContext("2d");
+        const grad = ctxG.createRadialGradient(128,128,0,128,128,128);
+        grad.addColorStop(0, "rgba(138,43,226,0.9)");
+        grad.addColorStop(1, "rgba(0,0,0,0)");
+        ctxG.fillStyle = grad; ctxG.fillRect(0,0,256,256);
+        const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvasGlow), transparent: true }));
+        glow.scale.set(300, 300, 1);
+        scene.add(glow);
+
+        // Palabras
+        const palabras = ["TE AMO ❤️", "MI TODO 🌎", "OJITOS BRILLANTES ✨", "PRINCESA 👑", "ERES MAGIA 🦋", "MI CIELO 🌌", "SIEMPRE JUNTOS ♾️", "HERMOSA 😍", "MI VIDA", "MI REINA", "MI LUZ", "ETERNIDAD"];
+        const textGroup = new THREE.Group();
+        scene.add(textGroup);
+
+        for (let i = 0; i < 150; i++) {
+            const p = palabras[i % palabras.length];
+            const txtCanvas = document.createElement("canvas");
+            const tCtx = txtCanvas.getContext("2d");
+            txtCanvas.width = 300; txtCanvas.height = 80;
+            tCtx.font = "bold 35px Arial"; tCtx.fillStyle = "#ffffff"; tCtx.textAlign = "center";
+            tCtx.shadowColor = "#8a2be2"; tCtx.shadowBlur = 15;
+            tCtx.fillText(p, 150, 50);
+
+            const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(txtCanvas), transparent: true }));
+            const angle = Math.random() * Math.PI * 2;
+            const radius = 120 + Math.random() * 450;
+            sprite.position.set(Math.cos(angle) * radius, (Math.random() - 0.5) * 60, Math.sin(angle) * radius);
+            sprite.scale.set(70, 20, 1);
+            sprite.userData = { angle: angle, radius: radius, speed: 0.002 + Math.random() * 0.004 };
+            textGroup.add(sprite);
+        }
+
+        camera.position.set(0, 400, 700);
+        camera.lookAt(0, 0, 0);
+
+        function animate() {
+            requestAnimationFrame(animate);
+            starPoints.rotation.y += 0.0001;
+            textGroup.children.forEach(word => {
+                word.userData.angle += word.userData.speed;
+                word.position.x = Math.cos(word.userData.angle) * word.userData.radius;
+                word.position.z = Math.sin(word.userData.angle) * word.userData.radius;
+                word.quaternion.copy(camera.quaternion);
+            });
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
